@@ -103,14 +103,39 @@ open(os.path.join(src, "include", "module.modulemap"), "w").write("""module Syph
     export *
 }
 """)
+# The OpenGL half is a second target, SyphonGL, that builds on the Metal target's base classes and messaging; an app that only uses Metal never links OpenGL.
+glsrc = os.path.join(out, "Sources", "SyphonGL")
+glinc = os.path.join(glsrc, "include", "Syphon")
+os.makedirs(glinc, exist_ok=True)
+GL_PUBLIC = ["SyphonOpenGLServer.h", "SyphonOpenGLClient.h", "SyphonOpenGLImage.h", "SyphonImageBase.h", "SyphonServer.h", "SyphonClient.h", "SyphonImage.h"]
+GL_PRIVATE_H = ["SyphonCGL.h", "SyphonOpenGLFunctions.h", "SyphonGLShader.h", "SyphonGLVertices.h", "SyphonServerGLShader.h", "SyphonServerGLVertices.h",
+                "SyphonServerRendererGL.h", "SyphonServerRendererCoreGL.h", "SyphonServerRendererLegacyGL.h", "SyphonIOSurfaceImageCore.h", "SyphonIOSurfaceImageLegacy.h"]
+GL_IMPL = ["SyphonOpenGLServer.m", "SyphonOpenGLClient.m", "SyphonOpenGLImage.m", "SyphonImageBase.m", "SyphonServer.m", "SyphonClient.m", "SyphonImage.m",
+           "SyphonCGL.c", "SyphonOpenGLFunctions.c", "SyphonGLShader.m", "SyphonGLVertices.m", "SyphonServerGLShader.m", "SyphonServerGLVertices.m",
+           "SyphonServerRendererGL.m", "SyphonServerRendererCoreGL.m", "SyphonServerRendererLegacyGL.m", "SyphonIOSurfaceImageCore.m", "SyphonIOSurfaceImageLegacy.m"]
+for f in GL_PUBLIC: shutil.copy(os.path.join(up, f), os.path.join(glinc, f))
+for f in GL_PRIVATE_H + GL_IMPL: shutil.copy(os.path.join(up, f), os.path.join(glsrc, f))
+open(os.path.join(glsrc, "include", "module.modulemap"), "w").write("""module SyphonGL {
+    header "Syphon/SyphonOpenGLServer.h"
+    header "Syphon/SyphonOpenGLClient.h"
+    header "Syphon/SyphonOpenGLImage.h"
+    export *
+}
+""")
+
 open(os.path.join(out, "Package.swift"), "w").write("""// swift-tools-version: 5.9
 import PackageDescription
 
-// Syphon's Metal server and client (https://github.com/Syphon/Syphon-Framework, BSD 2-Clause, LICENSE.Syphon), built by SwiftPM alone.
+// Syphon (https://github.com/Syphon/Syphon-Framework, BSD 2-Clause, LICENSE.Syphon), built by SwiftPM alone.
+//   Syphon   the Metal server and client, with the base classes, messaging and server directory they share.
+//   SyphonGL the OpenGL server, client and image (and the older SyphonServer, SyphonClient and SyphonImage names for them), on top of Syphon.
 let package = Package(
     name: "Syphon",
     platforms: [.macOS(.v13)],
-    products: [.library(name: "Syphon", targets: ["Syphon"])],
+    products: [
+        .library(name: "Syphon", targets: ["Syphon"]),
+        .library(name: "SyphonGL", targets: ["SyphonGL"]),
+    ],
     targets: [
         .target(
             name: "Syphon",
@@ -118,10 +143,19 @@ let package = Package(
             cSettings: [.headerSearchPath("."), .headerSearchPath("include/Syphon"), .define("SYPHONLOG(...)", to: "")],
             linkerSettings: [.linkedFramework("Cocoa"), .linkedFramework("IOSurface"), .linkedFramework("Metal")]
         ),
+        .target(
+            name: "SyphonGL",
+            dependencies: ["Syphon"],
+            cSettings: [.headerSearchPath("."), .headerSearchPath("include/Syphon"), .headerSearchPath("../Syphon"), .headerSearchPath("../Syphon/include/Syphon"), .define("SYPHONLOG(...)", to: "")],
+            linkerSettings: [.linkedFramework("Cocoa"), .linkedFramework("IOSurface"), .linkedFramework("OpenGL")]
+        ),
         .testTarget(name: "SyphonTests", dependencies: ["Syphon"]),
+        .testTarget(name: "SyphonGLTests", dependencies: ["Syphon", "SyphonGL"]),
     ]
 )
 """)
 os.makedirs(os.path.join(out, "Tests", "SyphonTests"), exist_ok=True)
 shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "RoundTripTests.swift"), os.path.join(out, "Tests", "SyphonTests", "RoundTripTests.swift"))
+os.makedirs(os.path.join(out, "Tests", "SyphonGLTests"), exist_ok=True)
+shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "GLInteropTests.swift"), os.path.join(out, "Tests", "SyphonGLTests", "GLInteropTests.swift"))
 print("assembled", len(PUBLIC), "public,", len(PRIVATE_H), "private headers,", len(IMPL), "implementation files")

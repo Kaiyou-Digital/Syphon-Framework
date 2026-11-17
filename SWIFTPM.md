@@ -1,21 +1,35 @@
-# Syphon as a Swift package (Metal server and client)
+# Syphon as a Swift package (Metal and OpenGL)
 
-This branch (`swiftpm-metal`) of Kaiyou Digital's fork adds a `Package.swift` so an app can depend on Syphon's Metal server and client through Swift Package Manager, without building `Syphon.xcodeproj` and without the Metal Toolchain. Everything else in the repository is upstream's, unchanged. Syphon is © bangnoise (Tom Butterworth) & vade (Anton Marini) and the Metal code © Maxime Touroute & Philippe Chaurand (Millumin); the licence is upstream's 2-clause BSD, kept as `LICENSE.Syphon` and in every vendored file.
+This branch (`swiftpm-metal`) of Kaiyou Digital's fork adds a `Package.swift` so an app can depend on Syphon's Metal or OpenGL servers and clients through Swift Package Manager, without building `Syphon.xcodeproj` and without the Metal Toolchain. Everything else in the repository is upstream's, unchanged. Syphon is © bangnoise (Tom Butterworth) & vade (Anton Marini) and the Metal code © Maxime Touroute & Philippe Chaurand (Millumin); the licence is upstream's 2-clause BSD, kept as `LICENSE.Syphon` and in every vendored file.
 
 ## Use
 
 ```swift
 .package(url: "https://github.com/Kaiyou-Digital/Syphon-Framework.git", revision: "<commit on this branch>")
-// target dependency: .product(name: "Syphon", package: "Syphon-Framework")
+// target dependency: .product(name: "Syphon", package: "Syphon-Framework")      (Metal)
+//                    .product(name: "SyphonGL", package: "Syphon-Framework")    (OpenGL, optional)
 ```
 
 ```swift
 import Syphon
 let server = SyphonMetalServer(name: "My app", device: device, options: nil)
-server?.publishFrameTexture(texture, on: commandBuffer, imageRegion: NSRect(x: 0, y: 0, width: w, height: h), flipped: false)
+server?.publishFrameTexture(texture, on: commandBuffer, imageRegion: NSRect(x: 0, y: 0, width: w, height: h), flipped: true) // see "Which way up a picture is"
 ```
 
-macOS 13 or later. Only the Metal half is included (`SyphonMetalServer`, `SyphonMetalClient`, `SyphonServerDirectory` and the messaging code they use); the OpenGL classes are not.
+macOS 13 or later. There are two products, so an app links only what it uses:
+
+- **`Syphon`**: the Metal server and client (`SyphonMetalServer`, `SyphonMetalClient`), `SyphonServerDirectory`, and the base classes and messaging they share.
+- **`SyphonGL`**: the OpenGL server, client and image (`SyphonOpenGLServer`, `SyphonOpenGLClient`, `SyphonOpenGLImage`, and the older names `SyphonServer`, `SyphonClient`, `SyphonImage`). It builds on `Syphon` and links OpenGL, which Apple deprecated; a Metal-only app never links it.
+
+## Which way up a picture is
+
+Measured (`GLInteropTests`), not assumed from the headers. The shared surface holds the picture **bottom row first**, as OpenGL stores it:
+
+- An OpenGL server publishing an unflipped texture (`flipped: NO`, the ordinary case) makes that surface.
+- A Metal texture is stored top row first. A Metal server that publishes with `flipped: YES` makes exactly the same surface as the OpenGL server, so OpenGL apps show its picture right way up. With `flipped: NO` the rows are copied as they are, and OpenGL clients would show the picture upside down.
+- The Metal client gives the surface as it is, bottom row first: **a Metal client flips what it draws**.
+
+So an app that wants to look right to the rest of the Syphon world publishes Metal frames with `flipped: YES` and flips what it receives. Two apps that both skip the flip agree with each other and are both upside down to everything else.
 
 ## What differs from upstream's files in `Sources/Syphon`
 

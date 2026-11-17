@@ -1,0 +1,6 @@
+module SyphonGL {
+    header "Syphon/SyphonOpenGLServer.h"
+    header "Syphon/SyphonOpenGLClient.h"
+    header "Syphon/SyphonOpenGLImage.h"
+    export *
+}
